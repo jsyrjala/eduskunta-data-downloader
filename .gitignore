@@ -6,6 +6,7 @@
 *.csv
 *.xlsx
 *.json
+*.parquet
 
 # Python
 __pycache__/

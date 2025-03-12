@@ -16,23 +16,58 @@ import sys
 import asyncio
 import aiohttp
 import concurrent.futures
+import threading
 
 BASE_URL = "https://avoindata.eduskunta.fi/api/v1"
 # Maximum supported items per page by the API
 PER_PAGE = 100
 # Default number of concurrent API requests (can be overridden with --concurrency)
 DEFAULT_CONCURRENT_REQUESTS = 3
-# Small delay between API requests to avoid overwhelming the server (in seconds)
-API_DELAY = 0.2
+# Default rate limit in requests per second (can be overridden with --rate-limit)
+DEFAULT_RATE_LIMIT = 5.0
+# Token bucket for rate limiting
+class RateLimiter:
+    def __init__(self, rate_limit: float):
+        """Initialize rate limiter with tokens per second"""
+        self.rate_limit = rate_limit
+        self.tokens = rate_limit
+        self.last_update = time.time()
+        self.lock = threading.Lock()
+        
+    def acquire(self):
+        """Acquire a token. Blocks if no tokens are available."""
+        with self.lock:
+            # Refill the bucket based on time passed
+            now = time.time()
+            time_passed = now - self.last_update
+            self.tokens = min(self.rate_limit, self.tokens + time_passed * self.rate_limit)
+            self.last_update = now
+            
+            # If we don't have a full token, we need to wait
+            if self.tokens < 1.0:
+                sleep_time = (1.0 - self.tokens) / self.rate_limit
+                time.sleep(sleep_time)
+                self.tokens = 0.0
+                self.last_update = time.time()
+            else:
+                # Consume one token
+                self.tokens -= 1.0
+
+# Global rate limiter instance, will be initialized in main()
+rate_limiter = None
 
 def get_all_tables() -> List[str]:
     """Get a list of all available tables from the Eduskunta API."""
+    if rate_limiter:
+        rate_limiter.acquire()
     response = requests.get(f"{BASE_URL}/tables/")
     response.raise_for_status()
     return response.json()
 
 def get_table_row_counts() -> Dict[str, int]:
     """Get row counts for all tables using the dedicated endpoint."""
+    if rate_limiter:
+        rate_limiter.acquire()
     response = requests.get(f"{BASE_URL}/tables/counts")
     response.raise_for_status()
     data = response.json()
@@ -41,6 +76,8 @@ def get_table_row_counts() -> Dict[str, int]:
 
 def get_table_info(table_name: str) -> Dict[str, Any]:
     """Get information for a specific table."""
+    if rate_limiter:
+        rate_limiter.acquire()
     response = requests.get(f"{BASE_URL}/tables/{table_name}/rows", params={"page": 0, "perPage": 1})
     response.raise_for_status()
     data = response.json()
@@ -56,6 +93,10 @@ def fetch_page_with_retry(table_name: str, page: int, per_page: int, retries=3) 
     
     for attempt in range(retries):
         try:
+            # Acquire a token from the rate limiter before making the request
+            if rate_limiter:
+                rate_limiter.acquire()
+                
             response = requests.get(url, params=params, timeout=15)
             response.raise_for_status()
             data = response.json()
@@ -94,7 +135,9 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
         print(f"Warning: Couldn't get row counts: {e}")
         total_pages = None
     
-    # Get the first page (always needed)
+    # Get the first page (always needed) with rate limiting
+    if rate_limiter:
+        rate_limiter.acquire()
     response = requests.get(
         f"{BASE_URL}/tables/{table_name}/rows",
         params={"page": 0, "perPage": PER_PAGE}
@@ -230,10 +273,22 @@ def parse_args():
     parser.add_argument("--db-file", default="eduskunta.duckdb", help="Output DuckDB filename")
     parser.add_argument("--no-progress", action="store_true", help="Disable progress bar and ETA display")
     parser.add_argument("--concurrency", type=int, default=5, help="Number of concurrent API requests (default: 5)")
-    return parser.parse_args()
+    parser.add_argument("--rate-limit", type=float, default=DEFAULT_RATE_LIMIT, 
+                        help=f"API rate limit in requests per second (default: {DEFAULT_RATE_LIMIT})")
+    return parser, parser.parse_args()
 
 def main():
-    args = parse_args()
+    parser, args = parse_args()
+    
+    # Check if no action was specified
+    if not (args.tables or args.all or args.list_tables):
+        parser.print_help()
+        print("\nNo action specified. Please use --tables, --all, or --list-tables.")
+        return
+    
+    # Initialize the global rate limiter with the provided rate limit
+    global rate_limiter
+    rate_limiter = RateLimiter(args.rate_limit)
     
     # Start time for total download timer
     start_time = time.time()
@@ -277,17 +332,41 @@ def main():
                 print()
         return
 
+    # Define a list of important tables to prioritize
+    important_tables = [
+        "SaliDBAanestys",       # Voting records
+        "SaliDBAanestysPaikat", # Voting positions/seats
+        "VaskiData",            # Parliamentary documents
+        "HETiedot",             # Member of Parliament information
+        "HEAsiat",              # Parliamentary matters/issues
+        "HEIstunto",            # Parliamentary session data
+        "ToimenpiteenVastuutaho" # Actions and responsible parties
+    ]
+    
     # Determine which tables to load
     tables_to_load = []
     if args.all:
-        tables_to_load = all_tables
+        # When downloading all tables, prioritize important ones first
+        prioritized_tables = []
+        
+        # First add all important tables that exist in the API
+        for table in important_tables:
+            if table in all_tables:
+                prioritized_tables.append(table)
+        
+        # Then add all other tables
+        for table in all_tables:
+            if table not in prioritized_tables:
+                prioritized_tables.append(table)
+        
+        tables_to_load = prioritized_tables
     elif args.tables:
         tables_to_load = args.tables
     else:
-        # Default to a few example tables if nothing specified
-        tables_to_load = ["SaliDBAanestys"]
-        print("No tables specified. Using default table for example.")
-        print("Use --tables to specify tables or --all to download all tables.")
+        # We shouldn't reach here because we already checked at the beginning of main()
+        # But just in case, handle it gracefully
+        print("No tables specified. Please use --tables or --all to specify which tables to download.")
+        return
 
     # Initialize the pipeline with DuckDB destination
     # Check if dlt version supports destination_options
@@ -312,10 +391,20 @@ def main():
 
     # Download each table
     successful_tables = 0
+    
+    # Show message about priority tables if downloading all
+    if args.all:
+        prioritized_count = sum(1 for table in important_tables if table in all_tables)
+        print(f"\nPrioritizing download of {prioritized_count} important tables first, followed by remaining tables")
+    
     for table in tables_to_load:
         if table in all_tables:
             try:
-                print(f"\nLoading table: {table}")
+                # Add indicator if this is a priority table
+                if table in important_tables:
+                    print(f"\nLoading PRIORITY table: {table}")
+                else:
+                    print(f"\nLoading table: {table}")
                 
                 # Measure time for this table
                 table_start_time = time.time()
@@ -349,6 +438,8 @@ def main():
                     except Exception:
                         # Try alternate method if the first failed
                         try:
+                            if rate_limiter:
+                                rate_limiter.acquire()
                             response = requests.get(f"{BASE_URL}/tables/{table}/rows", params={"page": 0, "perPage": 1})
                             data = response.json()
                             if "rowCount" in data:
@@ -381,7 +472,8 @@ def main():
                     'rows': row_count,
                     'pages': pages,
                     'time': table_time_str,
-                    'verification': verification_status
+                    'verification': verification_status,
+                    'priority': table in important_tables
                 }
                 
                 print(f"Load info: {load_info}")
@@ -444,22 +536,30 @@ def main():
         
     print(f"Database file: {args.db_file}")
     print(f"Concurrency level: {args.concurrency} connections")
+    print(f"Rate limit: {args.rate_limit} requests/second")
     print("="*60)
     
     # Print individual table summaries if there were successful downloads
     if successful_tables > 0 and table_summaries:
-        print("\nTABLE DETAILS:")
+        # Count priority tables downloaded
+        priority_tables_downloaded = sum(1 for summary in table_summaries.values() if summary.get('priority', False))
+        
+        print(f"\nTABLE DETAILS ({priority_tables_downloaded} priority tables marked with 🔑):")
         for table, summary in table_summaries.items():
             rows = summary.get('rows', 'unknown')
             pages = summary.get('pages', 'unknown')
             time_taken = summary.get('time', 'unknown')
             verification = summary.get('verification', '')
             
-            # Add verification information
+            # Get priority status
+            is_priority = summary.get('priority', False)
+            priority_indicator = "🔑 " if is_priority else ""
+            
+            # Add verification and priority information
             if verification and verification != "OK":
-                print(f"- {table}: {rows:,} rows in {pages} pages ({time_taken}) - VERIFICATION: {verification}")
+                print(f"- {priority_indicator}{table}: {rows:,} rows in {pages} pages ({time_taken}) - VERIFICATION: {verification}")
             else:
-                print(f"- {table}: {rows:,} rows in {pages} pages ({time_taken}) ✓")
+                print(f"- {priority_indicator}{table}: {rows:,} rows in {pages} pages ({time_taken}) ✓")
     
     # Print final message
     print("\nTo explore the data, run: python explore_data.py")

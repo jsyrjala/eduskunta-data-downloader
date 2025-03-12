@@ -2,10 +2,12 @@
 
 ## Build & Test Commands
 - Install dependencies: `pip install -r requirements.txt`
-- Run data pipeline: `python main.py`
+- Show help: `python main.py`
 - List available tables: `python main.py --list-tables`
 - Download specific tables: `python main.py --tables TABLE1 TABLE2`
 - Download all tables: `python main.py --all`
+- Control concurrency: `python main.py --concurrency 10`
+- Set API rate limit: `python main.py --rate-limit 10.0`
 - Explore downloaded data: `python explore_data.py`
 - Run tests (when added): `pytest`
 - Run single test (when added): `pytest tests/test_file.py::test_function`
@@ -26,3 +28,5 @@
 - Reference OpenAPI specs at https://avoindata.eduskunta.fi/swagger/apidocs.html
 - Error handling: Catch and log specific exceptions
 - Do not modify API response structure when storing in DuckDB
+- Use rate limiting to avoid overwhelming the API
+- Implement proper retry mechanism with exponential backoff

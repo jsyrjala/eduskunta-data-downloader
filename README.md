@@ -1,6 +1,6 @@
 # Eduskunta Data Downloader
 
-This tool downloads data from the Finnish Parliament (Eduskunta) Open Data API and stores it in a DuckDB database.
+This tool downloads data from the Finnish Parliament (Eduskunta) Open Data API and stores it in a DuckDB database. It features concurrent downloads with rate limiting to be respectful of the API service.
 
 ## Setup
 
@@ -9,7 +9,11 @@ This tool downloads data from the Finnish Parliament (Eduskunta) Open Data API a
 pip install -r requirements.txt
 ```
 
-2. Run the script:
+2. Run the script with parameters:
+```
+python main.py --tables SaliDBAanestys
+```
+or see help:
 ```
 python main.py
 ```
@@ -27,6 +31,9 @@ Options:
 - `--tables TABLE1 TABLE2 ...`: Download specific tables
 - `--all`: Download all available tables
 - `--db-file FILENAME`: Specify output DuckDB filename (default: eduskunta.duckdb)
+- `--concurrency N`: Set the number of concurrent API requests (default: 5)
+- `--rate-limit N.N`: Set API rate limit in requests per second (default: 5.0)
+- `--no-progress`: Disable progress bar and ETA display
 
 Examples:
 ```bash
@@ -36,11 +43,14 @@ python main.py --list-tables
 # Download specific tables
 python main.py --tables SaliDBAanestys VaskiData
 
-# Download all tables
+# Download all tables (important tables are downloaded first)
 python main.py --all
 
 # Download to a specific database file
 python main.py --tables SaliDBAanestys --db-file parliament_votes.duckdb
+
+# Optimize download speed with more connections but respect API rate limits
+python main.py --tables SaliDBAanestys --concurrency 10 --rate-limit 8.0
 ```
 
 ## Data Exploration
@@ -58,9 +68,19 @@ This interactive tool allows you to:
 
 ## Available Tables
 
-Some example tables include:
-- SaliDBAanestys (Votes)
-- VaskiData (Documents)
+### Priority Tables
+The following tables are considered most important and are downloaded first when using the `--all` option:
+
+- SaliDBAanestys - Voting records
+- SaliDBAanestysPaikat - Voting positions/seats
+- VaskiData - Parliamentary documents
+- HETiedot - Member of Parliament information
+- HEAsiat - Parliamentary matters/issues
+- HEIstunto - Parliamentary session data
+- ToimenpiteenVastuutaho - Actions and responsible parties
+
+### Other Tables
+The API provides many additional tables. Use `--list-tables` to see all available tables with their row counts.
 
 ## API Documentation
 

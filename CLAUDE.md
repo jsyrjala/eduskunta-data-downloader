@@ -8,6 +8,8 @@
 - Download all tables: `python main.py --all`
 - Control concurrency: `python main.py --concurrency 10`
 - Set API rate limit: `python main.py --rate-limit 10.0`
+- Limit rows per table: `python main.py --tables TABLE1 --limit 100`
+- Disable colors/emojis: `python main.py --tables TABLE1 --no-color`
 - Explore downloaded data: `python explore_data.py`
 - Run tests (when added): `pytest`
 - Run single test (when added): `pytest tests/test_file.py::test_function`

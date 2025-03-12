@@ -178,10 +178,16 @@ def fetch_page_with_retry(table_name: str, page: int, per_page: int, retries=3) 
 table_page_counts = {}
 
 @dlt.resource(name="eduskunta_table", write_disposition="replace")
-def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS):
+def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS, row_limit: Optional[int] = None):
     """
     dlt resource that yields all rows from a table by paginating through the results.
     Uses the maximum supported page size (100 items per page) with concurrent requests via ThreadPoolExecutor.
+    
+    Parameters:
+        table_name: Name of the table to download
+        show_progress: Whether to show progress bar and ETA
+        max_concurrent_requests: Maximum number of concurrent API requests
+        row_limit: Optional maximum number of rows to download
     """
     # Get the initial row count to calculate total pages
     table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
@@ -215,10 +221,19 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     # Get column names
     column_names = data.get("columnNames", [])
     
+    # Track total rows yielded so far
+    total_rows_yielded = 0
+    
     # Process first page data
     first_page_rows = data.get("rowData", [])
     for row in first_page_rows:
         yield dict(zip(column_names, row))
+        total_rows_yielded += 1
+        
+        # Check if we've reached the row limit
+        if row_limit is not None and total_rows_yielded >= row_limit:
+            print(format_text(f"\nReached row limit of {row_limit} rows", Colors.YELLOW, Emoji.INFO))
+            return
     
     # Update total pages if needed
     if total_pages is None and "rowCount" in data and data["rowCount"] > 0:
@@ -354,6 +369,16 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
         if page_num in processed_pages:
             for row in processed_pages[page_num]:
                 yield dict(zip(column_names, row))
+                total_rows_yielded += 1
+                
+                # Check if we've reached the row limit
+                if row_limit is not None and total_rows_yielded >= row_limit:
+                    print(format_text(f"\nReached row limit of {row_limit} rows", Colors.YELLOW, Emoji.INFO))
+                    break
+            
+            # If we've reached the row limit, stop processing pages
+            if row_limit is not None and total_rows_yielded >= row_limit:
+                break
     
     # Print a newline to move to the next line after progress display
     print()
@@ -391,6 +416,7 @@ def parse_args():
     parser.add_argument("--db-file", default="eduskunta.duckdb", help="Output DuckDB filename")
     parser.add_argument("--no-progress", action="store_true", help="Disable progress bar and ETA display")
     parser.add_argument("--no-color", action="store_true", help="Disable colors and emojis in output")
+    parser.add_argument("--limit", type=int, help="Limit the number of rows to download per table")
     parser.add_argument("--concurrency", type=int, default=5, help="Number of concurrent API requests (default: 5)")
     parser.add_argument("--rate-limit", type=float, default=DEFAULT_RATE_LIMIT, 
                         help=f"API rate limit in requests per second (default: {DEFAULT_RATE_LIMIT})")
@@ -536,11 +562,17 @@ def main():
                 # Measure time for this table
                 table_start_time = time.time()
                 
+                # If limit is specified, show info about it
+                if args.limit:
+                    limit_text = format_text(str(args.limit), Colors.BRIGHT_YELLOW, bold=True)
+                    print(format_text(f"Row limit set to {limit_text} rows", Colors.CYAN, Emoji.INFO))
+                
                 load_info = pipeline.run(
                     eduskunta_table(
                         table_name=table, 
                         show_progress=not args.no_progress,
-                        max_concurrent_requests=args.concurrency
+                        max_concurrent_requests=args.concurrency,
+                        row_limit=args.limit
                     ),
                     table_name=table.lower()
                 )

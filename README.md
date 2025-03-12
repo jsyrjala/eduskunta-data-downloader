@@ -33,6 +33,7 @@ Options:
 - `--db-file FILENAME`: Specify output DuckDB filename (default: eduskunta.duckdb)
 - `--concurrency N`: Set the number of concurrent API requests (default: 5)
 - `--rate-limit N.N`: Set API rate limit in requests per second (default: 5.0)
+- `--limit N`: Limit the number of rows to download per table
 - `--no-progress`: Disable progress bar and ETA display
 - `--no-color`: Disable colors and emojis in output
 
@@ -52,6 +53,9 @@ python main.py --tables SaliDBAanestys --db-file parliament_votes.duckdb
 
 # Optimize download speed with more connections but respect API rate limits
 python main.py --tables SaliDBAanestys --concurrency 10 --rate-limit 8.0
+
+# Download only the first 100 rows from a table (useful for testing)
+python main.py --tables SaliDBAanestys --limit 100
 ```
 
 ## Data Exploration

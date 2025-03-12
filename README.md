@@ -102,12 +102,13 @@ python export_data.py --table TABLE_NAME [options]
 Options:
 - `--list`: List all available tables in the database
 - `--table TABLE_NAME`: Table to export
-- `--format {csv,excel,json}`: Output format (default: csv)
+- `--format {csv,excel,json,parquet}`: Output format (default: csv)
 - `--output-dir DIRECTORY`: Directory to save exported files (default: current directory)
 - `--limit N`: Maximum number of rows to export
 - `--where "CONDITION"`: Filter condition (SQL WHERE clause)
 - `--query "SQL"`: Custom SQL query to export (overrides --table)
 - `--db-file FILE`: Path to DuckDB database file (default: eduskunta.duckdb)
+- `--compression {snappy,gzip,brotli,zstd,none}`: Compression algorithm for Parquet files (default: snappy)
 
 Examples:
 ```bash
@@ -122,6 +123,9 @@ python export_data.py --table SaliDBAanestys --where "IstuntoId = 123" --format 
 
 # Export custom query results to JSON
 python export_data.py --query "SELECT * FROM parliament_data.salidbaanestyspaikat WHERE AanestysId = 1000" --format json
+
+# Export data to Parquet format with different compression
+python export_data.py --table SaliDBAanestys --format parquet --compression gzip
 ```
 
 ## Available Tables

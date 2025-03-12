@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Export tool for Eduskunta data.
-Allows exporting tables from the DuckDB database to CSV, Excel, or JSON formats.
+Allows exporting tables from the DuckDB database to CSV, Excel, JSON, or Parquet formats.
 """
 
 import os
@@ -10,6 +10,8 @@ import argparse
 import duckdb
 import pandas as pd
 import json
+import pyarrow as pa
+import pyarrow.parquet as pq
 from pathlib import Path
 
 def list_tables(conn):
@@ -130,8 +132,44 @@ def export_to_json(df, output_path, orient="records"):
         print(f"Error exporting to JSON: {e}")
         return False
 
+def export_to_parquet(df, output_path, compression="snappy"):
+    """
+    Export a DataFrame to Parquet format.
+    
+    Args:
+        df: Pandas DataFrame to export
+        output_path: Path to save the Parquet file
+        compression: Compression algorithm (snappy, gzip, brotli, zstd, or None)
+    """
+    try:
+        # Convert pandas DataFrame to PyArrow Table
+        table = pa.Table.from_pandas(df)
+        
+        # Write to Parquet with specified compression
+        pq.write_table(table, output_path, compression=compression)
+        
+        print(f"Data exported to Parquet: {output_path}")
+        print(f"Compression: {compression}")
+        return True
+    except Exception as e:
+        print(f"Error exporting to Parquet: {e}")
+        
+        # Try with different compression if the first one fails
+        if compression != "snappy" and compression is not None:
+            try:
+                print(f"Trying with snappy compression instead...")
+                table = pa.Table.from_pandas(df)
+                pq.write_table(table, output_path, compression="snappy")
+                print(f"Data exported to Parquet: {output_path}")
+                print(f"Compression: snappy (fallback)")
+                return True
+            except Exception as e2:
+                print(f"Alternative compression also failed: {e2}")
+                
+        return False
+
 def export_data(db_file, table_name=None, output_format="csv", output_dir=".",
-                query=None, limit=None, where=None):
+                query=None, limit=None, where=None, compression="snappy"):
     """
     Export data from DuckDB to specified format.
     
@@ -205,6 +243,12 @@ def export_data(db_file, table_name=None, output_format="csv", output_dir=".",
         elif output_format.lower() == "json":
             output_path = os.path.join(output_dir, f"{base_filename}.json")
             export_to_json(df, output_path)
+            
+        elif output_format.lower() == "parquet":
+            output_path = os.path.join(output_dir, f"{base_filename}.parquet")
+            # Handle "none" as None for compression
+            comp = None if compression.lower() == "none" else compression.lower()
+            export_to_parquet(df, output_path, compression=comp)
         
         else:
             print(f"Unsupported output format: {output_format}")
@@ -233,7 +277,7 @@ def main():
     parser.add_argument("--list", action="store_true",
                       help="List available tables and exit")
     
-    parser.add_argument("--format", choices=["csv", "excel", "json"], default="csv",
+    parser.add_argument("--format", choices=["csv", "excel", "json", "parquet"], default="csv",
                       help="Output format (default: csv)")
     
     parser.add_argument("--output-dir", default=".",
@@ -247,6 +291,9 @@ def main():
     
     parser.add_argument("--where",
                       help="WHERE clause to filter data (ignored if --query is provided)")
+                      
+    parser.add_argument("--compression", choices=["snappy", "gzip", "brotli", "zstd", "none"], default="snappy",
+                      help="Compression for Parquet files (default: snappy)")
     
     args = parser.parse_args()
     
@@ -263,7 +310,8 @@ def main():
         output_dir=args.output_dir,
         query=args.query,
         limit=args.limit,
-        where=args.where
+        where=args.where,
+        compression=args.compression
     )
 
 if __name__ == "__main__":

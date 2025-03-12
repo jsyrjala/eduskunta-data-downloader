@@ -14,6 +14,8 @@
 - Export data to CSV: `python export_data.py --table TABLE_NAME`
 - Export data to Excel: `python export_data.py --table TABLE_NAME --format excel`
 - Export data to JSON: `python export_data.py --table TABLE_NAME --format json`
+- Export data to Parquet: `python export_data.py --table TABLE_NAME --format parquet`
+- Choose Parquet compression: `python export_data.py --table TABLE_NAME --format parquet --compression gzip`
 - List exportable tables: `python export_data.py --list`
 - Export with custom query: `python export_data.py --query "SELECT * FROM parliament_data.TABLE_NAME WHERE CONDITION"`
 - Run tests: `pytest`

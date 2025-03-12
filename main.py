@@ -226,14 +226,27 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     
     # Process first page data
     first_page_rows = data.get("rowData", [])
-    for row in first_page_rows:
-        yield dict(zip(column_names, row))
-        total_rows_yielded += 1
-        
-        # Check if we've reached the row limit
-        if row_limit is not None and total_rows_yielded >= row_limit:
-            print(format_text(f"\nReached row limit of {row_limit} rows", Colors.YELLOW, Emoji.INFO))
-            return
+    
+    # Check if we have any rows
+    if not first_page_rows:
+        # If there are no rows but we have column names, create a placeholder
+        # This ensures the table exists in DuckDB even if there's no data
+        if column_names:
+            print(format_text(f"No data found for table {table_name}, creating schema-only table", Colors.YELLOW, Emoji.WARNING))
+            # Create an empty row with None values as a placeholder
+            placeholder = {col: None for col in column_names}
+            yield placeholder
+            total_rows_yielded += 1
+    else:
+        # Process normal rows
+        for row in first_page_rows:
+            yield dict(zip(column_names, row))
+            total_rows_yielded += 1
+            
+            # Check if we've reached the row limit
+            if row_limit is not None and total_rows_yielded >= row_limit:
+                print(format_text(f"\nReached row limit of {row_limit} rows", Colors.YELLOW, Emoji.INFO))
+                return
     
     # Update total pages if needed
     if total_pages is None and "rowCount" in data and data["rowCount"] > 0:
@@ -626,7 +639,15 @@ def main():
                     row_count = db_row_count
                 except Exception as e:
                     row_count = "unknown"
-                    verification_status = f"ERROR: {str(e)[:50]}..."
+                    # Get a better error message - handle common cases
+                    error_msg = str(e)
+                    if "Table with name" in error_msg and "does not exist" in error_msg:
+                        verification_status = "ERROR: Table not found in database (no data loaded)"
+                    elif len(error_msg) > 100:
+                        # If error is very long, truncate it but preserve key information
+                        verification_status = f"ERROR: {error_msg[:100]}..."
+                    else:
+                        verification_status = f"ERROR: {error_msg}"
                     
                 # Get page count from our global tracker
                 pages = table_page_counts.get(table, "?")

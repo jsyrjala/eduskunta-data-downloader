@@ -7,6 +7,7 @@ Downloads data from the Eduskunta API and stores it in a DuckDB database.
 import requests
 import dlt
 import dlt.destinations  # For older dlt versions
+import duckdb
 from typing import Dict, List, Any, Optional, Tuple
 import time
 import datetime
@@ -67,6 +68,9 @@ def fetch_page_with_retry(table_name: str, page: int, per_page: int, retries=3) 
             retry_delay = 0.5 * (2 ** attempt)
             print(f"Retrying page {page} after error: {str(e)[:60]}... (attempt {attempt+1}/{retries})")
             time.sleep(retry_delay)
+
+# Global dictionary to track page counts for each table
+table_page_counts = {}
 
 @dlt.resource(name="eduskunta_table", write_disposition="replace")
 def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS):
@@ -208,7 +212,13 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     else:
         time_str = f"{total_time/3600:.1f} hours"
     
-    print(f"Downloaded {completed + 1} pages from {table_name} in {time_str}")
+    # Total pages includes the first page (page 0) plus all other pages
+    total_pages = completed + 1
+    
+    # Update global page count tracker
+    table_page_counts[table_name] = total_pages
+    
+    print(f"Downloaded {total_pages} pages from {table_name} in {time_str}")
 
 def parse_args():
     """Parse command line arguments."""
@@ -224,6 +234,12 @@ def parse_args():
 
 def main():
     args = parse_args()
+    
+    # Start time for total download timer
+    start_time = time.time()
+    
+    # Dictionary to store table download summaries
+    table_summaries = {}
 
     print("Retrieving available tables...")
     all_tables = get_all_tables()
@@ -300,6 +316,10 @@ def main():
         if table in all_tables:
             try:
                 print(f"\nLoading table: {table}")
+                
+                # Measure time for this table
+                table_start_time = time.time()
+                
                 load_info = pipeline.run(
                     eduskunta_table(
                         table_name=table, 
@@ -308,6 +328,35 @@ def main():
                     ),
                     table_name=table.lower()
                 )
+                
+                # Calculate table download time
+                table_time = time.time() - table_start_time
+                if table_time < 60:
+                    table_time_str = f"{table_time:.1f} seconds"
+                elif table_time < 3600:
+                    table_time_str = f"{table_time/60:.1f} minutes"
+                else:
+                    table_time_str = f"{table_time/3600:.1f} hours"
+                
+                # Get row count for this table
+                try:
+                    conn = duckdb.connect(args.db_file)
+                    result = conn.execute(f"SELECT COUNT(*) FROM parliament_data.{table.lower()}").fetchone()
+                    row_count = result[0] if result else 0
+                    conn.close()
+                except Exception:
+                    row_count = "unknown"
+                    
+                # Get page count from our global tracker
+                pages = table_page_counts.get(table, "?")
+                
+                # Store summary info
+                table_summaries[table] = {
+                    'rows': row_count,
+                    'pages': pages,
+                    'time': table_time_str
+                }
+                
                 print(f"Load info: {load_info}")
                 successful_tables += 1
             except Exception as e:
@@ -315,10 +364,62 @@ def main():
         else:
             print(f"Table {table} not found in API")
 
-    # Print summary
-    print(f"\nDownload complete. {successful_tables} of {len(tables_to_load)} tables loaded successfully.")
-    print(f"Data loaded to DuckDB file: {args.db_file}")
-    print(f"Tables created in schema: parliament_data")
+    # Calculate and format total download time
+    end_time = time.time()
+    total_download_time = end_time - start_time
+    if total_download_time < 60:
+        time_str = f"{total_download_time:.1f} seconds"
+    elif total_download_time < 3600:
+        time_str = f"{total_download_time/60:.1f} minutes"
+    else:
+        time_str = f"{total_download_time/3600:.1f} hours"
+    
+    # Count total rows downloaded
+    total_rows = 0
+    try:
+        if successful_tables > 0:
+            conn = duckdb.connect(args.db_file)
+            for table in tables_to_load:
+                if table in all_tables:
+                    try:
+                        result = conn.execute(f"SELECT COUNT(*) FROM parliament_data.{table.lower()}").fetchone()
+                        if result:
+                            total_rows += result[0]
+                    except Exception:
+                        # Table might not exist if download failed
+                        pass
+            conn.close()
+    except Exception as e:
+        print(f"Warning: Couldn't count rows in database: {e}")
+
+    # Print detailed summary
+    print("\n" + "="*60)
+    print(f"DOWNLOAD SUMMARY")
+    print("="*60)
+    print(f"Total time: {time_str}")
+    print(f"Tables processed: {len(tables_to_load)}")
+    print(f"Tables loaded successfully: {successful_tables}")
+    print(f"Total rows downloaded: {total_rows:,}")
+    
+    # Calculate download rates
+    if total_download_time > 0:
+        rows_per_second = total_rows / total_download_time
+        print(f"Download rate: {rows_per_second:.1f} rows/second")
+        
+    print(f"Database file: {args.db_file}")
+    print(f"Concurrency level: {args.concurrency} connections")
+    print("="*60)
+    
+    # Print individual table summaries if there were successful downloads
+    if successful_tables > 0 and table_summaries:
+        print("\nTABLE DETAILS:")
+        for table, summary in table_summaries.items():
+            rows = summary.get('rows', 'unknown')
+            pages = summary.get('pages', 'unknown')
+            time_taken = summary.get('time', 'unknown')
+            print(f"- {table}: {rows:,} rows in {pages} pages ({time_taken})")
+    
+    # Print final message
     print("\nTo explore the data, run: python explore_data.py")
 
 if __name__ == "__main__":

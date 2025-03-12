@@ -2,6 +2,11 @@
 *.duckdb
 *.duckdb.wal
 
+# Data files
+*.csv
+*.xlsx
+*.json
+
 # Python
 __pycache__/
 *.py[cod]

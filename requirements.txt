@@ -2,3 +2,7 @@ requests>=2.31.0
 aiohttp>=3.8.0
 dlt[duckdb]>=0.3.5
 duckdb>=0.9.0
+
+# Test dependencies
+pytest>=8.0.0
+pytest-mock>=3.10.0

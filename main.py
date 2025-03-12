@@ -254,7 +254,12 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
         
         print(f"\r{download_icon}Downloaded {count_text} pages of {table_text} {bar_text} {percent_text}\033[K", end='', flush=True)
     else:
-        count_text = format_text(f"1/{total_pages}", Colors.BRIGHT_CYAN, bold=True)
+        # Handle the case where total_pages might be None
+        if total_pages is not None:
+            count_text = format_text(f"1/{total_pages}", Colors.BRIGHT_CYAN, bold=True)
+        else:
+            count_text = format_text("1/?", Colors.BRIGHT_CYAN, bold=True)
+            
         table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
         download_icon = format_text("", Emoji.DOWNLOAD)
         
@@ -262,7 +267,7 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     
     # If there's only one page or no more pages, we're done
     has_more = data.get("hasMore", False)
-    if not has_more or total_pages <= 1:
+    if not has_more or (total_pages is not None and total_pages <= 1):
         # Print a newline to move to the next line after progress display
         print()
         
@@ -680,7 +685,7 @@ def main():
     time_text = format_text(time_str, Colors.BRIGHT_GREEN, Emoji.TIME, bold=True)
     processed_text = format_text(str(len(tables_to_load)), Colors.BRIGHT_CYAN, bold=True)
     success_text = format_text(str(successful_tables), Colors.BRIGHT_GREEN, Emoji.CHECK, bold=True)
-    rows_text = format_text(f"{total_rows:,}", Colors.BRIGHT_CYAN, Emoji.ROWS, bold=True)
+    rows_text = format_text(str(f"{total_rows:,}"), Colors.BRIGHT_CYAN, Emoji.ROWS, bold=True)
     
     print(f"Total time: {time_text}")
     print(f"Tables processed: {processed_text}")
@@ -737,7 +742,7 @@ def main():
             
             # Format table name and statistics
             table_text = format_text(table, Colors.BRIGHT_YELLOW, bold=True)
-            rows_text = format_text(f"{rows:,} rows", Colors.BRIGHT_CYAN, Emoji.ROWS)
+            rows_text = format_text(f"{str(rows)} rows", Colors.BRIGHT_CYAN, Emoji.ROWS)
             pages_text = format_text(f"{pages} pages", Colors.CYAN, Emoji.PAGES)
             time_text = format_text(f"({time_taken})", Colors.GREY, Emoji.TIME)
             

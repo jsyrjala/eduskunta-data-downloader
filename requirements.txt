@@ -9,3 +9,8 @@ pyarrow>=14.0.0  # For Parquet export
 # Test dependencies
 pytest>=8.0.0
 pytest-mock>=3.10.0
+
+# Development tools
+flake8>=7.0.0  # Linting
+black>=24.3.0  # Formatting
+mypy>=1.9.0  # Type checking

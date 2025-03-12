@@ -3,6 +3,10 @@
 ## Development Workflow
 - Always run tests before committing: `pytest`
 - Always verify changes work as expected before pushing
+- Run linters and formatters before committing:
+  - Code formatting: `black .`
+  - Linting: `flake8 .`
+  - Type checking: `mypy .`
 - Keep the README.md up to date with new features
 - Add appropriate entries to this CLAUDE.md file for new commands
 

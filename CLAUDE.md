@@ -1,5 +1,11 @@
 # CLAUDE.md - Project Guide
 
+## Development Workflow
+- Always run tests before committing: `pytest`
+- Always verify changes work as expected before pushing
+- Keep the README.md up to date with new features
+- Add appropriate entries to this CLAUDE.md file for new commands
+
 ## Build & Test Commands
 - Install dependencies: `pip install -r requirements.txt`
 - Show help: `python main.py`

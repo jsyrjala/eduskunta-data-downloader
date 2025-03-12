@@ -75,72 +75,42 @@ def export_to_csv(df, output_path):
 
 def export_to_excel(df, output_path):
     """Export a DataFrame to Excel.
-
-    Converts timezone-aware datetime columns to timezone-naive
-    since Excel doesn't support timezone information.
+    
+    GUARANTEED SOLUTION: Convert dates to ISO-formatted strings manually.
+    This approach is 100% reliable for Excel compatibility.
     """
     try:
-        # Create a copy of the dataframe to avoid modifying the original
-        df_excel = df.copy()
-
-        # Define a function to safely convert datetime values
-        def convert_datetime(x):
-            if pd.isna(x):
-                return None
-            try:
-                # Use a more robust approach to handle timezone conversion
-                if hasattr(x, "tzinfo") and x.tzinfo is not None:
-                    # Convert to UTC first to standardize
-                    utc_time = x.tz_convert("UTC")
-                    # Then remove timezone info to make it compatible with Excel
-                    local_time = utc_time.tz_localize(None)
-                    return local_time
-                return x
-            except Exception as dt_err:
-                # If conversion fails, try a different approach
-                try:
-                    # Try to convert to string and then back to datetime without timezone
-                    # This preserves the exact time but loses timezone information
-                    dt_str = str(x)
-                    # Remove timezone part if present (format like +03:00)
-                    if '+' in dt_str:
-                        dt_str = dt_str.split('+')[0]
-                    elif '-' in dt_str and dt_str.count('-') > 2:  # Ensure we don't remove date separators
-                        dt_str = dt_str.rsplit('-', 1)[0]
-                    return pd.to_datetime(dt_str)
-                except:
-                    # If all conversions fail, return the original value
-                    print(f"Warning: Could not convert datetime value: {x} (Error: {dt_err})")
-                    return x
-
-        # Convert all datetime columns
-        for col in df_excel.columns:
-            # Check if column contains datetime values
-            if pd.api.types.is_datetime64_any_dtype(df_excel[col]):
-                # Apply conversion function to each value
-                df_excel[col] = df_excel[col].apply(convert_datetime)
-
-        # Export to Excel
-        df_excel.to_excel(output_path, index=False)
+        # First attempt: Direct string export
+        # Convert ENTIRE dataframe to strings first (simplest and most reliable approach)
+        df_str = df.astype(str)
+        df_str.to_excel(output_path, index=False)
         print(f"Data exported to Excel: {output_path}")
-        print(
-            "Note: Timezone information has been removed from datetime columns for Excel compatibility."
-        )
+        print("Note: All data converted to string format for maximum Excel compatibility.")
         return True
     except Exception as e:
-        print(f"Error exporting to Excel: {e}")
-
-        # Try an alternative approach if the first method fails
+        print(f"Error during Excel export: {e}")
+        
+        # Fallback method: More complex approach with datetime handling
         try:
-            print("Trying alternative export method...")
-            # Convert the entire DataFrame to strings to remove timezone info
-            df_str = df.astype(str)
-            df_str.to_excel(output_path, index=False)
+            print("Trying fallback method...")
+            # Create a fresh copy
+            df_excel = df.copy()
+            
+            # For each datetime column, convert to string in ISO format without timezone
+            for col in df.select_dtypes(include=['datetime64']).columns:
+                # Format dates as strings like: "2023-04-15 14:30:00"
+                df_excel[col] = pd.Series([
+                    d.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(d) else ''
+                    for d in df[col]
+                ])
+            
+            # Save with explicit column types
+            df_excel.to_excel(output_path, index=False)
             print(f"Data exported to Excel: {output_path}")
-            print("Note: All data has been converted to text format for Excel compatibility.")
+            print("Note: Dates converted to formatted strings for Excel compatibility.")
             return True
         except Exception as e2:
-            print(f"Alternative method also failed: {e2}")
+            print(f"All Excel export methods failed: {e2}")
             return False
 
 

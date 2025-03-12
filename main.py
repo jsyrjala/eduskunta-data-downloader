@@ -25,6 +25,42 @@ PER_PAGE = 100
 DEFAULT_CONCURRENT_REQUESTS = 3
 # Default rate limit in requests per second (can be overridden with --rate-limit)
 DEFAULT_RATE_LIMIT = 5.0
+
+# ANSI Colors and formatting
+class Colors:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    BLUE = "\033[34m"
+    GREEN = "\033[32m"
+    CYAN = "\033[36m"
+    YELLOW = "\033[33m"
+    RED = "\033[31m"
+    MAGENTA = "\033[35m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_CYAN = "\033[96m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_MAGENTA = "\033[95m"
+    BRIGHT_BLUE = "\033[94m"
+    GREY = "\033[90m"
+    
+# Emoji set
+class Emoji:
+    DOWNLOAD = "📥"
+    CHECK = "✅"
+    WARNING = "⚠️"
+    ERROR = "❌"
+    STAR = "⭐"
+    TIME = "⏱️"
+    DATABASE = "🗄️"
+    STATS = "📊"
+    PAGES = "📄"
+    ROWS = "📋"
+    PROGRESS = "🔄"
+    INFO = "ℹ️"
+    PRIORITY = "🔑"
+    SPEED = "⚡"
+    NETWORK = "🌐"
 # Token bucket for rate limiting
 class RateLimiter:
     def __init__(self, rate_limit: float):
@@ -55,6 +91,34 @@ class RateLimiter:
 
 # Global rate limiter instance, will be initialized in main()
 rate_limiter = None
+
+# Global flag for colored output, will be initialized in main()
+use_colors = True
+
+def format_text(text, color=None, emoji=None, bold=False):
+    """
+    Format text with color and emoji if enabled.
+    If colors are disabled, returns plain text without ANSI codes and emojis.
+    """
+    if not use_colors:
+        return text
+    
+    result = ""
+    if emoji:
+        result += f"{emoji} "
+    
+    if color or bold:
+        styles = []
+        if color:
+            styles.append(color)
+        if bold:
+            styles.append(Colors.BOLD)
+        
+        result += f"{''.join(styles)}{text}{Colors.RESET}"
+    else:
+        result += text
+        
+    return result
 
 def get_all_tables() -> List[str]:
     """Get a list of all available tables from the Eduskunta API."""
@@ -120,7 +184,10 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     Uses the maximum supported page size (100 items per page) with concurrent requests via ThreadPoolExecutor.
     """
     # Get the initial row count to calculate total pages
-    print(f"Getting metadata for {table_name}... (using {max_concurrent_requests} concurrent connections)")
+    table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
+    conn_text = format_text(str(max_concurrent_requests), Colors.BRIGHT_CYAN, Emoji.NETWORK, bold=True)
+    
+    print(f"Getting metadata for {table_text}... (using {conn_text} concurrent connections)")
     
     # First, get the row count for this table
     try:
@@ -163,16 +230,32 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
         bar_width = 20
         filled_width = int(bar_width * progress_percent)
         bar = '█' * filled_width + '░' * (bar_width - filled_width)
-        print(f"\rDownloaded page 1/{total_pages} of {table_name} [{bar}] {progress_percent:.1%}\033[K", end='', flush=True)
+        
+        count_text = format_text(f"1/{total_pages}", Colors.BRIGHT_CYAN, bold=True)
+        table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
+        bar_text = format_text(f"[{bar}]", Colors.YELLOW)
+        percent_text = format_text(f"{progress_percent:.1%}", Colors.BRIGHT_GREEN, bold=True)
+        download_icon = format_text("", Emoji.DOWNLOAD)
+        
+        print(f"\r{download_icon}Downloaded {count_text} pages of {table_text} {bar_text} {percent_text}\033[K", end='', flush=True)
     else:
-        print(f"\rDownloaded page 1/{total_pages} of {table_name}\033[K", end='', flush=True)
+        count_text = format_text(f"1/{total_pages}", Colors.BRIGHT_CYAN, bold=True)
+        table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
+        download_icon = format_text("", Emoji.DOWNLOAD)
+        
+        print(f"\r{download_icon}Downloaded {count_text} pages of {table_text}\033[K", end='', flush=True)
     
     # If there's only one page or no more pages, we're done
     has_more = data.get("hasMore", False)
     if not has_more or total_pages <= 1:
         # Print a newline to move to the next line after progress display
         print()
-        print(f"Downloaded 1 page from {table_name}")
+        
+        # Format completion message
+        table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
+        check_icon = format_text("", Emoji.CHECK)
+        
+        print(f"{check_icon}Downloaded 1 page from {table_text}")
         return
     
     # Start time tracking for ETA calculation
@@ -238,10 +321,29 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
                         
                         # Use carriage return to move cursor to start of line and overwrite previous output
                         # Use \033[K to clear to the end of line
-                        progress_msg = f"Downloaded {completed+1}/{total_pages} pages of {table_name} [{bar}] {progress_percent:.1%} (ETA: {eta})\033[K"
+                        
+                        # Determine color based on progress
+                        if progress_percent < 0.3:
+                            color = Colors.YELLOW
+                        elif progress_percent < 0.7:
+                            color = Colors.CYAN
+                        else:
+                            color = Colors.GREEN
+                            
+                        count_text = format_text(f"{completed+1}/{total_pages}", Colors.BRIGHT_CYAN, bold=True)
+                        table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
+                        bar_text = format_text(f"[{bar}]", color)
+                        percent_text = format_text(f"{progress_percent:.1%}", Colors.BRIGHT_GREEN, bold=True)
+                        eta_text = format_text(f"ETA: {eta}", Colors.GREY, Emoji.TIME)
+                        
+                        progress_msg = f"Downloaded {count_text} pages of {table_text} {bar_text} {percent_text} {eta_text}\033[K"
                         print(f"\r{progress_msg}", end='', flush=True)
                     else:
-                        progress_msg = f"Downloaded {completed+1}/{total_pages} pages of {table_name} (ETA: {eta})\033[K"
+                        count_text = format_text(f"{completed+1}/{total_pages}", Colors.BRIGHT_CYAN, bold=True)
+                        table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
+                        eta_text = format_text(f"ETA: {eta}", Colors.GREY, Emoji.TIME)
+                        
+                        progress_msg = f"Downloaded {count_text} pages of {table_text} {eta_text}\033[K"
                         print(f"\r{progress_msg}", end='', flush=True)
                 
             except Exception as e:
@@ -271,7 +373,13 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     # Update global page count tracker
     table_page_counts[table_name] = total_pages
     
-    print(f"Downloaded {total_pages} pages from {table_name} in {time_str}")
+    # Format completion message
+    pages_text = format_text(f"{total_pages}", Colors.BRIGHT_CYAN, bold=True)
+    table_text = format_text(table_name, Colors.BRIGHT_YELLOW, bold=True)
+    time_text = format_text(time_str, Colors.BRIGHT_GREEN, Emoji.TIME, bold=True)
+    check_icon = format_text("", Emoji.CHECK)
+    
+    print(f"{check_icon}Downloaded {pages_text} pages from {table_text} in {time_text}")
 
 def parse_args():
     """Parse command line arguments."""
@@ -282,6 +390,7 @@ def parse_args():
     parser.add_argument("--show-columns", action="store_true", help="Show column names when listing tables")
     parser.add_argument("--db-file", default="eduskunta.duckdb", help="Output DuckDB filename")
     parser.add_argument("--no-progress", action="store_true", help="Disable progress bar and ETA display")
+    parser.add_argument("--no-color", action="store_true", help="Disable colors and emojis in output")
     parser.add_argument("--concurrency", type=int, default=5, help="Number of concurrent API requests (default: 5)")
     parser.add_argument("--rate-limit", type=float, default=DEFAULT_RATE_LIMIT, 
                         help=f"API rate limit in requests per second (default: {DEFAULT_RATE_LIMIT})")
@@ -297,8 +406,11 @@ def main():
         return
     
     # Initialize the global rate limiter with the provided rate limit
-    global rate_limiter
+    global rate_limiter, use_colors
     rate_limiter = RateLimiter(args.rate_limit)
+    
+    # Set the global color flag based on command-line option
+    use_colors = not args.no_color
     
     # Start time for total download timer
     start_time = time.time()
@@ -306,9 +418,10 @@ def main():
     # Dictionary to store table download summaries
     table_summaries = {}
 
-    print("Retrieving available tables...")
+    print(format_text("Retrieving available tables...", Colors.CYAN, Emoji.INFO))
     all_tables = get_all_tables()
-    print(f"Found {len(all_tables)} tables in the API")
+    count_text = format_text(str(len(all_tables)), Colors.BRIGHT_CYAN, bold=True)
+    print(format_text(f"Found {count_text} tables in the API", Colors.GREEN, Emoji.CHECK))
 
     if args.list_tables:
         # Get row counts for all tables at once - more efficient
@@ -405,16 +518,20 @@ def main():
     # Show message about priority tables if downloading all
     if args.all:
         prioritized_count = sum(1 for table in important_tables if table in all_tables)
-        print(f"\nPrioritizing download of {prioritized_count} important tables first, followed by remaining tables")
+        count_text = format_text(str(prioritized_count), Colors.BRIGHT_MAGENTA, Emoji.PRIORITY, bold=True)
+        print(f"\n{format_text('Prioritizing download of', Colors.CYAN)} {count_text} {format_text('important tables first, followed by remaining tables', Colors.CYAN)}")
     
     for table in tables_to_load:
         if table in all_tables:
             try:
-                # Add indicator if this is a priority table
+                # Add indicator and colors if this is a priority table
                 if table in important_tables:
-                    print(f"\nLoading PRIORITY table: {table}")
+                    priority_text = format_text("PRIORITY", Colors.BRIGHT_MAGENTA, Emoji.PRIORITY, bold=True)
+                    table_text = format_text(table, Colors.BRIGHT_YELLOW, bold=True)
+                    print(f"\nLoading {priority_text} table: {table_text}")
                 else:
-                    print(f"\nLoading table: {table}")
+                    table_text = format_text(table, Colors.BRIGHT_YELLOW, bold=True)
+                    print(f"\nLoading table: {table_text}")
                 
                 # Measure time for this table
                 table_start_time = time.time()
@@ -521,40 +638,61 @@ def main():
     except Exception as e:
         print(f"Warning: Couldn't count rows in database: {e}")
 
-    # Print detailed summary
-    print("\n" + "="*60)
-    print(f"DOWNLOAD SUMMARY")
-    print("="*60)
-    print(f"Total time: {time_str}")
-    print(f"Tables processed: {len(tables_to_load)}")
-    print(f"Tables loaded successfully: {successful_tables}")
-    print(f"Total rows downloaded: {total_rows:,}")
+    # Print detailed summary with colors and emojis
+    divider = format_text("="*60, Colors.GREY)
+    print("\n" + divider)
+    print(format_text("DOWNLOAD SUMMARY", Colors.BRIGHT_MAGENTA, Emoji.STATS, bold=True))
+    print(divider)
+    
+    # Format all summary items
+    time_text = format_text(time_str, Colors.BRIGHT_GREEN, Emoji.TIME, bold=True)
+    processed_text = format_text(str(len(tables_to_load)), Colors.BRIGHT_CYAN, bold=True)
+    success_text = format_text(str(successful_tables), Colors.BRIGHT_GREEN, Emoji.CHECK, bold=True)
+    rows_text = format_text(f"{total_rows:,}", Colors.BRIGHT_CYAN, Emoji.ROWS, bold=True)
+    
+    print(f"Total time: {time_text}")
+    print(f"Tables processed: {processed_text}")
+    print(f"Tables loaded successfully: {success_text}")
+    print(f"Total rows downloaded: {rows_text}")
     
     # Calculate download rates
     if total_download_time > 0:
         rows_per_second = total_rows / total_download_time
-        print(f"Download rate: {rows_per_second:.1f} rows/second")
+        speed_text = format_text(f"{rows_per_second:.1f} rows/second", Colors.BRIGHT_CYAN, Emoji.SPEED, bold=True)
+        print(f"Download rate: {speed_text}")
     
     # Add verification summary
     if successful_tables > 0 and table_summaries:
         verification_issues = sum(1 for summary in table_summaries.values() 
                                 if summary.get('verification', '') != "OK" and summary.get('verification', ''))
         if verification_issues == 0:
-            print(f"Data verification: All tables verified (API row counts match DuckDB counts) ✓")
+            verification_text = format_text("All tables verified (API row counts match DuckDB counts)", Colors.BRIGHT_GREEN, Emoji.CHECK, bold=True)
+            print(f"Data verification: {verification_text}")
         else:
-            print(f"Data verification: {verification_issues} tables with row count discrepancies ⚠️")
-        
-    print(f"Database file: {args.db_file}")
-    print(f"Concurrency level: {args.concurrency} connections")
-    print(f"Rate limit: {args.rate_limit} requests/second")
-    print("="*60)
+            issues_text = format_text(str(verification_issues), Colors.BRIGHT_RED, bold=True)
+            verification_text = format_text("tables with row count discrepancies", Colors.BRIGHT_RED, Emoji.WARNING)
+            print(f"Data verification: {issues_text} {verification_text}")
+    
+    # Database and connection settings
+    db_text = format_text(args.db_file, Colors.BRIGHT_YELLOW, Emoji.DATABASE, bold=True)
+    conn_text = format_text(f"{args.concurrency} connections", Colors.BRIGHT_CYAN, Emoji.NETWORK, bold=True)
+    rate_text = format_text(f"{args.rate_limit} requests/second", Colors.BRIGHT_CYAN, Emoji.SPEED, bold=True)
+    
+    print(f"Database file: {db_text}")
+    print(f"Concurrency level: {conn_text}")
+    print(f"Rate limit: {rate_text}")
+    print(divider)
     
     # Print individual table summaries if there were successful downloads
     if successful_tables > 0 and table_summaries:
         # Count priority tables downloaded
         priority_tables_downloaded = sum(1 for summary in table_summaries.values() if summary.get('priority', False))
         
-        print(f"\nTABLE DETAILS ({priority_tables_downloaded} priority tables marked with 🔑):")
+        details_text = format_text("TABLE DETAILS", Colors.BRIGHT_MAGENTA, bold=True)
+        priority_count = format_text(str(priority_tables_downloaded), Colors.BRIGHT_MAGENTA, Emoji.PRIORITY, bold=True)
+        priority_info = format_text("priority tables", Colors.CYAN)
+        
+        print(f"\n{details_text} ({priority_count} {priority_info}):")
         for table, summary in table_summaries.items():
             rows = summary.get('rows', 'unknown')
             pages = summary.get('pages', 'unknown')
@@ -563,16 +701,25 @@ def main():
             
             # Get priority status
             is_priority = summary.get('priority', False)
-            priority_indicator = "🔑 " if is_priority else ""
+            priority_indicator = format_text("", Emoji.PRIORITY) if is_priority else ""
+            
+            # Format table name and statistics
+            table_text = format_text(table, Colors.BRIGHT_YELLOW, bold=True)
+            rows_text = format_text(f"{rows:,} rows", Colors.BRIGHT_CYAN, Emoji.ROWS)
+            pages_text = format_text(f"{pages} pages", Colors.CYAN, Emoji.PAGES)
+            time_text = format_text(f"({time_taken})", Colors.GREY, Emoji.TIME)
             
             # Add verification and priority information
             if verification and verification != "OK":
-                print(f"- {priority_indicator}{table}: {rows:,} rows in {pages} pages ({time_taken}) - VERIFICATION: {verification}")
+                verification_text = format_text(f"VERIFICATION: {verification}", Colors.BRIGHT_RED, Emoji.WARNING)
+                print(f"- {priority_indicator}{table_text}: {rows_text} in {pages_text} {time_text} - {verification_text}")
             else:
-                print(f"- {priority_indicator}{table}: {rows:,} rows in {pages} pages ({time_taken}) ✓")
+                check_icon = format_text("", Emoji.CHECK)
+                print(f"- {priority_indicator}{table_text}: {rows_text} in {pages_text} {time_text} {check_icon}")
     
     # Print final message
-    print("\nTo explore the data, run: python explore_data.py")
+    explore_cmd = format_text("python explore_data.py", Colors.BRIGHT_CYAN, bold=True)
+    print(f"\n{format_text('To explore the data, run:', Colors.GREEN, Emoji.INFO)} {explore_cmd}")
 
 if __name__ == "__main__":
     main()

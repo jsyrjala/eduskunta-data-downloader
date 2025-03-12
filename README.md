@@ -34,6 +34,7 @@ Options:
 - `--concurrency N`: Set the number of concurrent API requests (default: 5)
 - `--rate-limit N.N`: Set API rate limit in requests per second (default: 5.0)
 - `--no-progress`: Disable progress bar and ETA display
+- `--no-color`: Disable colors and emojis in output
 
 Examples:
 ```bash

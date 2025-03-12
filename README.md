@@ -2,6 +2,24 @@
 
 This tool downloads data from the Finnish Parliament (Eduskunta) Open Data API and stores it in a DuckDB database. It features concurrent downloads with rate limiting to be respectful of the API service.
 
+## Data Source
+
+The data comes from the official Finnish Parliament Open Data service:
+- Main website: [https://avoindata.eduskunta.fi/](https://avoindata.eduskunta.fi/)
+- API documentation: [https://avoindata.eduskunta.fi/swagger/apidocs.html](https://avoindata.eduskunta.fi/swagger/apidocs.html)
+- API base URL: [https://avoindata.eduskunta.fi/api/v1](https://avoindata.eduskunta.fi/api/v1)
+- Data license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+This service provides comprehensive parliamentary data including:
+- Voting records
+- Parliamentary documents
+- Members of Parliament information
+- Committee information
+- Parliamentary sessions and proceedings
+- Legislative proposals and amendments
+
+The data is regularly updated by the Finnish Parliament and is provided as a public service to promote transparency and democratic participation.
+
 ## Setup
 
 1. Install dependencies:

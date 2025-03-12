@@ -1,0 +1,360 @@
+swagger: '2.0'
+info:
+  description: Base service for providing open data from Eduskunta
+  version: '1.0'
+  title: Avoin Data Search Application
+  termsOfService: 'http://'
+  contact:
+    name: Eduskunta
+  license:
+    url: 'https://'
+    name: eduskunta
+host: avoindata.eduskunta.fi
+basePath: /
+tags:
+  - name: tables-controller
+    description: Tables Controller
+paths:
+  /api/v1/tables/:
+    get:
+      tags:
+        - tables-controller
+      summary: Get table names.
+      operationId: getTablesUsingGET
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: array
+            items:
+              type: string
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+  /api/v1/tables/counts:
+    get:
+      tags:
+        - tables-controller
+      summary: Get row count estimate.
+      operationId: getRowCountsUsingGET
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/TableRowCount'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+  '/api/v1/tables/{tableName}/batch':
+    get:
+      tags:
+        - tables-controller
+      summary: 'Batch read table content - starting from given PK, ordered by PK ascending.'
+      operationId: getRowsBatchUsingGET
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: tableName
+          in: path
+          description: Table name
+          required: true
+          type: string
+          default: SaliDBAanestys
+        - name: pkName
+          in: query
+          description: Table primary key column
+          required: false
+          type: string
+          default: AanestysId
+        - name: pkStartValue
+          in: query
+          description: Primary key for the first row of table
+          required: false
+          type: integer
+          default: '13270'
+          format: int32
+        - name: perPage
+          in: query
+          description: Number of rows to be read from table
+          required: false
+          type: integer
+          default: '5'
+          format: int32
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/TableData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+  '/api/v1/tables/{tableName}/columns':
+    get:
+      tags:
+        - tables-controller
+      summary: 'Get column names for a table, including table primary key name.'
+      operationId: getColumnsUsingGET
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: tableName
+          in: path
+          description: Table name for columns
+          required: true
+          type: string
+          default: SaliDBAanestys
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: array
+            items:
+              type: object
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+        '500':
+          description: Failure
+  '/api/v1/tables/{tableName}/rows':
+    get:
+      tags:
+        - tables-controller
+      summary: Get table rows - or filter.
+      operationId: getRowsQueryUsingGET
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: tableName
+          in: path
+          description: Table name
+          required: true
+          type: string
+          default: SaliDBAanestys
+        - name: columnName
+          in: query
+          description: Column name for query if filter included - leave empty to display all
+          required: false
+          type: string
+          default: KohtaOtsikko
+        - name: columnValue
+          in: query
+          description: Value for column query if filter included (URL encoded '%' -> %25 for wildcards) - leave empty to display all
+          required: false
+          type: string
+          default: '%kalastus%'
+        - name: page
+          in: query
+          description: 'Page index [0-n]'
+          required: false
+          type: integer
+          default: '0'
+          format: int32
+        - name: perPage
+          in: query
+          description: Number of rows per page
+          required: false
+          type: integer
+          default: '5'
+          format: int32
+      responses:
+        '200':
+          description: Success
+          schema:
+            $ref: '#/definitions/TableData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Table or columnn not valid.
+  '/api/v1/tables/{tableName}/rows/{id}':
+    get:
+      tags:
+        - tables-controller
+      summary: Get single table row for id.
+      operationId: getSingleRowUsingGET
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - name: tableName
+          in: path
+          description: Table name
+          required: true
+          type: string
+          default: SaliDBAanestys
+        - name: id
+          in: path
+          description: Row ID
+          required: true
+          type: string
+          default: '13358'
+      responses:
+        '200':
+          description: Success
+          schema:
+            $ref: '#/definitions/TableData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+        '500':
+          description: Failure
+  '/api/v1/seating':
+    get:
+      tags:
+        - seating-controller
+      summary: Lists all of the seats in the parliament and who is sitting in that place.
+      operationId: getSeatingDataUsingGET
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Success
+          schema:
+            $ref: '#/definitions/SeatingListData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+        '500':
+          description: Failure
+  '/api/v1/seating/{id}':
+    get:
+      tags:
+        - seating-controller
+      summary: Gets one of the seats in the parliament and who is sitting in that place.
+      operationId: getSingleSeatingDataUsingGET
+      parameters:
+        - name: id
+          in: path
+          description: Heteka id (aka person id) of the member of the parliament
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Success
+          schema:
+            $ref: '#/definitions/SeatingData'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not Found
+        '500':
+          description: Failure
+definitions:
+  TableData:
+    properties:
+      columnCount:
+        type: integer
+        format: int32
+        description: Number of columns in table headers and rows.
+      columnNames:
+        type: array
+        description: Ordered list of the table columns (headers).
+        items:
+          type: string
+      hasMore:
+        type: boolean
+        description: True if more content left than provided by this page.
+      page:
+        type: integer
+        format: int32
+        description: Index of the page. Starting from 0.
+      perPage:
+        type: integer
+        format: int32
+        description: Number of displayed items in single page.
+      pkLastValue:
+        type: integer
+        format: int32
+        description: Primary key value of the last row in the response when ordered by primary key. Can be used in batch read.
+      pkName:
+        type: string
+        description: Name of the primary key in the table.
+      pkStartValue:
+        type: integer
+        format: int32
+        description: Primary key value of the first row in response when ordered by primary key. Can be used in batch read.
+      rowCount:
+        type: integer
+        format: int32
+        description: Number of rows.
+      rowData:
+        type: array
+        description: Table content in rows. Row column order is identical to the column names order.
+        items:
+          type: array
+          description: Single row string
+      tableName:
+        type: string
+        description: Name of the table.
+    description: Represents a set of rows from single relational database table.
+  TableRowCount:
+    properties:
+      rowCount:
+        type: integer
+        format: int32
+      tableName:
+        type: string
+  SeatingListData:
+    type: array
+    items: 
+      $ref: '#/definitions/SeatingData'
+  SeatingData:
+    type: object
+    properties:
+      hetekaId:
+        type: integer
+        format: int32
+      seatNumber:
+        type: integer
+        format: int32
+      lastname:
+        type: string
+      firstname:
+        type: string
+      party:
+        type: string
+      minister:
+        type: boolean
+      pictureUrl:
+        type: string
+

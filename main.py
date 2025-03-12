@@ -75,7 +75,7 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     Uses the maximum supported page size (100 items per page) with concurrent requests via ThreadPoolExecutor.
     """
     # Get the initial row count to calculate total pages
-    print(f"Getting metadata for {table_name}...")
+    print(f"Getting metadata for {table_name}... (using {max_concurrent_requests} concurrent connections)")
     
     # First, get the row count for this table
     try:

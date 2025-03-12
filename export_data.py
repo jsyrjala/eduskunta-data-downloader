@@ -63,14 +63,55 @@ def export_to_csv(df, output_path):
         return False
 
 def export_to_excel(df, output_path):
-    """Export a DataFrame to Excel."""
+    """Export a DataFrame to Excel.
+    
+    Converts timezone-aware datetime columns to timezone-naive 
+    since Excel doesn't support timezone information.
+    """
     try:
-        df.to_excel(output_path, index=False)
+        # Create a copy of the dataframe to avoid modifying the original
+        df_excel = df.copy()
+        
+        # Define a function to safely convert datetime values
+        def convert_datetime(x):
+            if pd.isna(x):
+                return None
+            try:
+                # Use a more robust approach to handle timezone conversion
+                if hasattr(x, 'tzinfo') and x.tzinfo is not None:
+                    return x.replace(tzinfo=None)
+                return x
+            except:
+                # If conversion fails, return the original value
+                return x
+        
+        # Convert all datetime columns
+        for col in df_excel.columns:
+            # Check if column contains datetime values
+            if pd.api.types.is_datetime64_any_dtype(df_excel[col]):
+                # Apply conversion function to each value
+                df_excel[col] = df_excel[col].apply(convert_datetime)
+        
+        # Export to Excel
+        df_excel.to_excel(output_path, index=False)
         print(f"Data exported to Excel: {output_path}")
+        print("Note: Timezone information has been removed from datetime columns for Excel compatibility.")
         return True
     except Exception as e:
         print(f"Error exporting to Excel: {e}")
-        return False
+        
+        # Try an alternative approach if the first method fails
+        try:
+            print("Trying alternative export method...")
+            # Convert the entire DataFrame to strings to remove timezone info
+            df_str = df.astype(str)
+            df_str.to_excel(output_path, index=False)
+            print(f"Data exported to Excel: {output_path}")
+            print("Note: All data has been converted to text format for Excel compatibility.")
+            return True
+        except Exception as e2:
+            print(f"Alternative method also failed: {e2}")
+            return False
 
 def export_to_json(df, output_path, orient="records"):
     """Export a DataFrame to JSON."""

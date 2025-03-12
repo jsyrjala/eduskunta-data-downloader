@@ -157,19 +157,21 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
     if total_pages is None and "rowCount" in data and data["rowCount"] > 0:
         total_pages = (data["rowCount"] + PER_PAGE - 1) // PER_PAGE
     
-    # Show initial progress
+    # Show initial progress with inline updating
     if show_progress and total_pages:
         progress_percent = 1 / total_pages
         bar_width = 20
         filled_width = int(bar_width * progress_percent)
         bar = '█' * filled_width + '░' * (bar_width - filled_width)
-        print(f"Downloaded page 1/{total_pages} of {table_name} [{bar}] {progress_percent:.1%}")
+        print(f"\rDownloaded page 1/{total_pages} of {table_name} [{bar}] {progress_percent:.1%}\033[K", end='', flush=True)
     else:
-        print(f"Downloaded page 1/{total_pages} of {table_name}")
+        print(f"\rDownloaded page 1/{total_pages} of {table_name}\033[K", end='', flush=True)
     
     # If there's only one page or no more pages, we're done
     has_more = data.get("hasMore", False)
     if not has_more or total_pages <= 1:
+        # Print a newline to move to the next line after progress display
+        print()
         print(f"Downloaded 1 page from {table_name}")
         return
     
@@ -227,15 +229,20 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
                     else:
                         eta = f"{est_remaining_seconds/3600:.1f}h"
                     
-                    # Update progress display
+                    # Update progress display using a single line with ANSI escape codes
                     if show_progress:
                         progress_percent = (completed + 1) / total_pages  # +1 for first page
                         bar_width = 20
                         filled_width = int(bar_width * progress_percent)
                         bar = '█' * filled_width + '░' * (bar_width - filled_width)
-                        print(f"Downloaded {completed+1}/{total_pages} pages of {table_name} [{bar}] {progress_percent:.1%} (ETA: {eta})")
+                        
+                        # Use carriage return to move cursor to start of line and overwrite previous output
+                        # Use \033[K to clear to the end of line
+                        progress_msg = f"Downloaded {completed+1}/{total_pages} pages of {table_name} [{bar}] {progress_percent:.1%} (ETA: {eta})\033[K"
+                        print(f"\r{progress_msg}", end='', flush=True)
                     else:
-                        print(f"Downloaded {completed+1}/{total_pages} pages of {table_name} (ETA: {eta})")
+                        progress_msg = f"Downloaded {completed+1}/{total_pages} pages of {table_name} (ETA: {eta})\033[K"
+                        print(f"\r{progress_msg}", end='', flush=True)
                 
             except Exception as e:
                 print(f"Error processing page {page}: {e}")
@@ -245,6 +252,9 @@ def eduskunta_table(table_name: str, show_progress: bool = True, max_concurrent_
         if page_num in processed_pages:
             for row in processed_pages[page_num]:
                 yield dict(zip(column_names, row))
+    
+    # Print a newline to move to the next line after progress display
+    print()
     
     # Print summary when download finishes
     total_time = time.time() - start_time

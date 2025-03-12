@@ -338,14 +338,40 @@ def main():
                 else:
                     table_time_str = f"{table_time/3600:.1f} hours"
                 
-                # Get row count for this table
+                # Get row count from API and from DuckDB for verification
                 try:
+                    # Get expected row count from API
+                    api_row_count = None
+                    try:
+                        row_counts = get_table_row_counts()
+                        if table in row_counts:
+                            api_row_count = row_counts[table]
+                    except Exception:
+                        # Try alternate method if the first failed
+                        try:
+                            response = requests.get(f"{BASE_URL}/tables/{table}/rows", params={"page": 0, "perPage": 1})
+                            data = response.json()
+                            if "rowCount" in data:
+                                api_row_count = data["rowCount"]
+                        except Exception:
+                            pass
+                    
+                    # Get actual row count from database
                     conn = duckdb.connect(args.db_file)
                     result = conn.execute(f"SELECT COUNT(*) FROM parliament_data.{table.lower()}").fetchone()
-                    row_count = result[0] if result else 0
+                    db_row_count = result[0] if result else 0
                     conn.close()
-                except Exception:
+                    
+                    # Store both counts and check for discrepancies
+                    if api_row_count is not None and db_row_count != api_row_count:
+                        verification_status = f"WARNING: Expected {api_row_count}, got {db_row_count}"
+                    else:
+                        verification_status = "OK"
+                        
+                    row_count = db_row_count
+                except Exception as e:
                     row_count = "unknown"
+                    verification_status = f"ERROR: {str(e)[:50]}..."
                     
                 # Get page count from our global tracker
                 pages = table_page_counts.get(table, "?")
@@ -354,7 +380,8 @@ def main():
                 table_summaries[table] = {
                     'rows': row_count,
                     'pages': pages,
-                    'time': table_time_str
+                    'time': table_time_str,
+                    'verification': verification_status
                 }
                 
                 print(f"Load info: {load_info}")
@@ -405,6 +432,15 @@ def main():
     if total_download_time > 0:
         rows_per_second = total_rows / total_download_time
         print(f"Download rate: {rows_per_second:.1f} rows/second")
+    
+    # Add verification summary
+    if successful_tables > 0 and table_summaries:
+        verification_issues = sum(1 for summary in table_summaries.values() 
+                                if summary.get('verification', '') != "OK" and summary.get('verification', ''))
+        if verification_issues == 0:
+            print(f"Data verification: All tables verified ✓")
+        else:
+            print(f"Data verification: {verification_issues} tables with discrepancies ⚠️")
         
     print(f"Database file: {args.db_file}")
     print(f"Concurrency level: {args.concurrency} connections")
@@ -417,7 +453,13 @@ def main():
             rows = summary.get('rows', 'unknown')
             pages = summary.get('pages', 'unknown')
             time_taken = summary.get('time', 'unknown')
-            print(f"- {table}: {rows:,} rows in {pages} pages ({time_taken})")
+            verification = summary.get('verification', '')
+            
+            # Add verification information
+            if verification and verification != "OK":
+                print(f"- {table}: {rows:,} rows in {pages} pages ({time_taken}) - VERIFICATION: {verification}")
+            else:
+                print(f"- {table}: {rows:,} rows in {pages} pages ({time_taken}) ✓")
     
     # Print final message
     print("\nTo explore the data, run: python explore_data.py")

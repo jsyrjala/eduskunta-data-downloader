@@ -76,7 +76,9 @@ python main.py --tables SaliDBAanestys --concurrency 10 --rate-limit 8.0
 python main.py --tables SaliDBAanestys --limit 100
 ```
 
-## Data Exploration
+## Data Exploration and Export
+
+### Exploring Data
 
 The repository includes a simple data exploration tool:
 
@@ -88,6 +90,39 @@ This interactive tool allows you to:
 1. View table schemas
 2. See sample data
 3. Run custom SQL queries
+
+### Exporting Data
+
+You can export tables or query results to CSV, Excel, or JSON formats using the export tool:
+
+```
+python export_data.py --table TABLE_NAME [options]
+```
+
+Options:
+- `--list`: List all available tables in the database
+- `--table TABLE_NAME`: Table to export
+- `--format {csv,excel,json}`: Output format (default: csv)
+- `--output-dir DIRECTORY`: Directory to save exported files (default: current directory)
+- `--limit N`: Maximum number of rows to export
+- `--where "CONDITION"`: Filter condition (SQL WHERE clause)
+- `--query "SQL"`: Custom SQL query to export (overrides --table)
+- `--db-file FILE`: Path to DuckDB database file (default: eduskunta.duckdb)
+
+Examples:
+```bash
+# List available tables
+python export_data.py --list
+
+# Export a table to CSV
+python export_data.py --table SaliDBAanestys --limit 100
+
+# Export filtered data to Excel
+python export_data.py --table SaliDBAanestys --where "IstuntoId = 123" --format excel
+
+# Export custom query results to JSON
+python export_data.py --query "SELECT * FROM parliament_data.salidbaanestyspaikat WHERE AanestysId = 1000" --format json
+```
 
 ## Available Tables
 

@@ -11,8 +11,13 @@
 - Limit rows per table: `python main.py --tables TABLE1 --limit 100`
 - Disable colors/emojis: `python main.py --tables TABLE1 --no-color`
 - Explore downloaded data: `python explore_data.py`
-- Run tests (when added): `pytest`
-- Run single test (when added): `pytest tests/test_file.py::test_function`
+- Export data to CSV: `python export_data.py --table TABLE_NAME`
+- Export data to Excel: `python export_data.py --table TABLE_NAME --format excel`
+- Export data to JSON: `python export_data.py --table TABLE_NAME --format json`
+- List exportable tables: `python export_data.py --list`
+- Export with custom query: `python export_data.py --query "SELECT * FROM parliament_data.TABLE_NAME WHERE CONDITION"`
+- Run tests: `pytest`
+- Run single test: `pytest tests/test_file.py::test_function`
 - Lint: `flake8 .`
 - Type check: `mypy .`
 

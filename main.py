@@ -364,7 +364,7 @@ def main():
                     
                     # Store both counts and check for discrepancies
                     if api_row_count is not None and db_row_count != api_row_count:
-                        verification_status = f"WARNING: Expected {api_row_count}, got {db_row_count}"
+                        verification_status = f"WARNING: API reported {api_row_count} rows, DuckDB contains {db_row_count} rows"
                     else:
                         verification_status = "OK"
                         
@@ -438,9 +438,9 @@ def main():
         verification_issues = sum(1 for summary in table_summaries.values() 
                                 if summary.get('verification', '') != "OK" and summary.get('verification', ''))
         if verification_issues == 0:
-            print(f"Data verification: All tables verified ✓")
+            print(f"Data verification: All tables verified (API row counts match DuckDB counts) ✓")
         else:
-            print(f"Data verification: {verification_issues} tables with discrepancies ⚠️")
+            print(f"Data verification: {verification_issues} tables with row count discrepancies ⚠️")
         
     print(f"Database file: {args.db_file}")
     print(f"Concurrency level: {args.concurrency} connections")
